@@ -24,6 +24,7 @@ use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
+use Symfony\Component\Mailer\Bridge\Mailjet\Transport\MailjetTemplatedEmail;
 
 class MailjetApiTransport extends AbstractApiTransport
 {
@@ -58,10 +59,7 @@ class MailjetApiTransport extends AbstractApiTransport
     protected function doSendApi(SentMessage $sentMessage, Email $email, Envelope $envelope): ResponseInterface
     {
         $response = $this->client->request('POST', sprintf('https://%s/v%s/send', $this->getEndpoint(), self::API_VERSION), [
-            'headers' => [
-                'Accept' => 'application/json',
-            ],
-            'auth_basic' => $this->publicKey.':'.$this->privateKey,
+            'auth_basic' => [$this->publicKey, $this->privateKey],
             'json' => $this->getPayload($email, $envelope),
         ]);
 
@@ -133,6 +131,35 @@ class MailjetApiTransport extends AbstractApiTransport
             }
 
             $message['Headers'][$header->getName()] = $header->getBodyAsString();
+        }
+
+        if ($email instanceof MailjetTemplatedEmail) {
+            if ($email->getCampaignName()) {
+                $message['CustomCampaign'] = $email->getCampaignName();
+            }
+
+            if ($email->getTemplateId()) {
+                $message['TemplateLanguage'] = true;
+                $message['TemplateID'] = $email->getTemplateId();
+            }
+
+            if (count($email->getVariables())) {
+                $message['Variables'] = $email->getVariables();
+            }
+
+            if ($email->getErrorReportingEmail()) {
+                $message['TemplateErrorReporting'] = array(
+                    'Email' => $email->getErrorReportingEmail(),
+                );
+            }
+
+            if ($email->isTemplateErrorDeliver()) {
+                $message['TemplateErrorDeliver'] = true;
+            }
+
+            if (count($email->getAdditionalProperties())) {
+                $message = array_merge($message, $email->getAdditionalProperties());
+            }
         }
 
         return [
